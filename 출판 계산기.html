@@ -1,0 +1,965 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>출판 비용 및 수익 시뮬레이터</title>
+    
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel (JSX 변환용) -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Pretendard Font -->
+    <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+
+    <style>
+        * { font-family: "Pretendard", -apple-system, BlinkMacSystemFont, system-ui, Roboto, "Helvetica Neue", "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif !important; }
+        
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #55798B;
+            cursor: pointer;
+            margin-top: -0px;
+            border: 2px solid white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+            position: relative;
+            z-index: 20;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 8px;
+            cursor: pointer;
+            background: transparent;
+        }
+
+        /* 인쇄(PDF 저장) 시 적용될 스타일 */
+        @media print {
+            .no-print { display: none !important; }
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background-color: white !important; }
+            .shadow-lg, .shadow-md, .shadow-sm { box-shadow: none !important; border: 1px solid #e5e7eb !important; }
+            .bg-gray-50 { background-color: white !important; }
+            
+            /* 페이지 넘김 방지 설정: 카드 내부가 잘리지 않도록 함 */
+            .print-break-inside-avoid {
+                break-inside: avoid;
+                page-break-inside: avoid;
+            }
+            
+            /* 페이지 여백 설정 (선택 사항) */
+            @page {
+                margin: 10mm;
+                size: auto;
+            }
+        }
+        
+        /* 비활성화 효과용 클래스 */
+        .dimmed-section {
+            opacity: 0.4;
+            pointer-events: none;
+            filter: grayscale(100%);
+            transition: all 0.3s ease;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // --- Icons ---
+        const IconWrapper = ({ children, className, style }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} style={style}>
+                {children}
+            </svg>
+        );
+
+        const Calculator = (props) => <IconWrapper {...props}><rect width="16" height="20" x="4" y="2" rx="2"/><line x1="8" x2="16" y1="6" y2="6"/><line x1="16" x2="16" y1="14" y2="18"/><path d="M16 10h.01"/><path d="M12 10h.01"/><path d="M8 10h.01"/><path d="M12 14h.01"/><path d="M8 14h.01"/><path d="M12 18h.01"/><path d="M8 18h.01"/></IconWrapper>;
+        const DollarSign = (props) => <IconWrapper {...props}><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></IconWrapper>;
+        const BookOpen = (props) => <IconWrapper {...props}><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></IconWrapper>;
+        const PieChart = (props) => <IconWrapper {...props}><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></IconWrapper>;
+        const TrendingUp = (props) => <IconWrapper {...props}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></IconWrapper>;
+        const Plus = (props) => <IconWrapper {...props}><path d="M5 12h14"/><path d="M12 5v14"/></IconWrapper>;
+        const Minus = (props) => <IconWrapper {...props}><path d="M5 12h14"/></IconWrapper>;
+        const Wallet = (props) => <IconWrapper {...props}><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></IconWrapper>;
+        const CheckSquare = (props) => <IconWrapper {...props}><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></IconWrapper>;
+        const Square = (props) => <IconWrapper {...props}><rect width="18" height="18" x="3" y="3" rx="2"/></IconWrapper>;
+        const Package = (props) => <IconWrapper {...props}><path d="m16.5 9.4-9-5.19"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></IconWrapper>;
+        const Printer = (props) => <IconWrapper {...props}><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></IconWrapper>;
+
+        // --- Color Constants ---
+        const MAIN_COLOR = '#55798B';
+        const MAIN_DARK = '#375260';
+        const SUB_COLOR = '#F3EEEA';
+        const INFO_BG = '#F8FAFC';
+        const WARNING_BG = '#FFF4F0';
+        const NAVER_COLOR = '#03C75A';
+        const KYOBO_COLOR = '#2A3855';
+
+        // --- Reusable Components ---
+        const Card = ({ title, children, icon: Icon, className = "", titleColor }) => (
+            <div className={`bg-white rounded-xl shadow-lg p-6 border border-gray-200 print-break-inside-avoid ${className}`}>
+                <div className="flex items-center gap-2 mb-4 pb-2 border-b border-gray-100">
+                    {Icon && <Icon className="w-5 h-5" style={{ color: titleColor || MAIN_COLOR }} />} 
+                    <h3 className="text-lg font-bold" style={{ color: titleColor || MAIN_DARK }}>{title}</h3>
+                </div>
+                {children}
+            </div>
+        );
+
+        const NumberInput = ({ label, value, onChange, step = 1, min = 0, suffix = "원", helpText, placeholder }) => (
+            <div className="mb-4">
+                <label className="block text-sm font-bold text-gray-700 mb-1">{label}</label>
+                <div className="relative rounded-md shadow-sm">
+                    <input
+                        type="number"
+                        value={value}
+                        onChange={(e) => {
+                            const val = e.target.value;
+                            onChange(val === '' ? '' : Number(val));
+                        }}
+                        step={step}
+                        min={min}
+                        placeholder={placeholder}
+                        className="block w-full rounded-md border-gray-300 pl-3 pr-12 py-2 focus:border-[#55798B] focus:ring-[#55798B] sm:text-sm border text-gray-900 font-medium placeholder-gray-400"
+                    />
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
+                        <span className="text-gray-500 font-medium sm:text-sm">{suffix}</span>
+                    </div>
+                </div>
+                {helpText && <p className="mt-1 text-xs text-gray-500">{helpText}</p>}
+            </div>
+        );
+
+        const ResultRow = ({ label, value, highlight = false, subValue, textColor, spacing = "py-2", labelSize="text-sm", valueSize="text-lg" }) => (
+            <div 
+                className={`flex justify-between items-center ${spacing} ${highlight ? 'font-bold px-3 rounded' : 'text-gray-700'}`}
+                style={highlight ? { backgroundColor: SUB_COLOR, color: MAIN_DARK } : {}}
+            >
+                <span className={`font-medium ${labelSize}`}>{label}</span>
+                <div className="text-right">
+                    <span className={`font-bold ${highlight ? valueSize : `text-gray-900 ${labelSize}`}`} 
+                            style={textColor ? { color: textColor } : (highlight ? { color: MAIN_DARK } : {})}>
+                        {value}
+                    </span>
+                    {subValue && <div className="text-[10px] text-gray-500 font-normal">{subValue}</div>}
+                </div>
+            </div>
+        );
+
+        const CheckboxItem = ({ label, checked, onChange, amount }) => (
+            <div 
+                className={`flex justify-between items-center py-2 cursor-pointer transition-colors ${checked ? 'text-gray-900' : 'text-gray-400'}`}
+                onClick={() => onChange(!checked)}
+            >
+                <div className="flex items-center gap-2">
+                    {checked ? (
+                        <CheckSquare className="w-5 h-5 text-[#55798B]" />
+                    ) : (
+                        <Square className="w-5 h-5 text-gray-300" />
+                    )}
+                    <span className={`font-bold ${checked ? '' : 'font-normal'}`}>{label}</span>
+                </div>
+                <span className={`${checked ? 'font-bold' : ''}`}>{amount.toLocaleString()}원</span>
+            </div>
+        );
+
+        const SliderWithButtons = ({ 
+            label, 
+            value, 
+            onChange, 
+            min, 
+            max, 
+            step, 
+            formatValue, 
+            leftLabel, 
+            rightLabel,
+            unitLabel,
+            valueSize = "text-sm", 
+            valueColor,
+            showButtons = true, 
+            marks = [],
+            markLabels = false 
+        }) => {
+            const handleDecrease = () => onChange(Math.max(min, value - step));
+            const handleIncrease = () => onChange(Math.min(max, value + step));
+
+            const getPercent = (val) => ((val - min) / (max - min)) * 100;
+
+            return (
+                <div className="mb-6">
+                    <div className="flex justify-between items-end mb-2">
+                        <label className="text-sm font-bold text-gray-700">{label}</label>
+                        <span className={`${valueSize} font-black`} style={{ color: valueColor || MAIN_COLOR }}>
+                            {formatValue ? formatValue(value) : `${value}${unitLabel || ''}`}
+                        </span>
+                    </div>
+                    
+                    <div className="flex items-center gap-3 relative">
+                        {leftLabel && <span className="text-xs text-gray-500 font-bold w-16 text-right">{leftLabel}</span>}
+                        
+                        {showButtons && (
+                            <button 
+                                onClick={handleDecrease}
+                                className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 hover:bg-gray-100 text-gray-600 transition-colors border border-gray-200 shadow-sm active:bg-gray-200 no-print"
+                                disabled={value <= min}
+                            >
+                                <Minus size={20} />
+                            </button>
+                        )}
+                        
+                        <div className="flex-1 relative h-6 flex items-center">
+                            <div className="absolute w-full h-2 bg-gray-200 rounded-lg overflow-hidden"></div>
+                            
+                            {marks.length > 0 && (
+                                <div className="absolute w-full h-2 pointer-events-none flex items-center" style={{ paddingLeft: '8px', paddingRight: '8px' }}>
+                                    <div className="relative w-full h-full">
+                                        {marks.map((mark, idx) => {
+                                            const percent = getPercent(mark.value);
+                                            return (
+                                                <div 
+                                                    key={idx} 
+                                                    className="absolute top-1/2 -translate-y-1/2 flex flex-col items-center z-0"
+                                                    style={{ left: `${percent}%`, transform: `translate(-50%, -50%)` }}
+                                                >
+                                                    <div className={`w-1 h-1 rounded-full bg-gray-400 mb-1`}></div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
+                            <input
+                                type="range"
+                                min={min}
+                                max={max}
+                                step={step}
+                                value={value}
+                                onChange={(e) => onChange(Number(e.target.value))}
+                                className="absolute w-full h-2 bg-transparent appearance-none cursor-pointer z-10"
+                                style={{
+                                    WebkitAppearance: 'none',
+                                    background: 'transparent'
+                                }}
+                            />
+                        </div>
+                        
+                        {showButtons && (
+                            <button 
+                                onClick={handleIncrease}
+                                className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 hover:bg-gray-100 text-gray-600 transition-colors border border-gray-200 shadow-sm active:bg-gray-200 no-print"
+                                disabled={value >= max}
+                            >
+                                <Plus size={20} />
+                            </button>
+                        )}
+
+                        {rightLabel && <span className="text-xs text-gray-500 font-bold w-16">{rightLabel}</span>}
+                    </div>
+                    
+                    {/* 눈금 라벨 (옵션) - 개선된 정렬 로직 적용 */}
+                    {marks.length > 0 && markLabels && (
+                        <div className="relative w-full h-6 mt-2 px-2">
+                             {marks.map((mark, idx) => {
+                                const percent = getPercent(mark.value);
+                                let alignClass = "-translate-x-1/2"; // 기본 중앙 정렬
+                                let textAlign = "text-center";
+                                let style = { left: `${percent}%` };
+
+                                // 첫번째 요소 (0%) - 좌측 정렬 (눈금 기준 텍스트 시작점)
+                                if (idx === 0) {
+                                    alignClass = ""; // transform 제거
+                                    textAlign = "text-left";
+                                    style = { left: '0%' }; // 좌측 끝
+                                }
+                                // 마지막 요소 (100%) - 우측 정렬 (눈금 기준 텍스트 끝점)
+                                else if (idx === marks.length - 1) {
+                                    alignClass = ""; // transform 제거
+                                    textAlign = "text-right";
+                                    style = { right: '0%' }; // 우측 끝
+                                }
+
+                                return (
+                                    <div 
+                                        key={idx} 
+                                        className={`absolute top-0 ${alignClass} ${textAlign} text-[10px] text-gray-500 font-medium w-24 leading-tight`}
+                                        style={style}
+                                    >
+                                        {mark.label}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // --- Main Component ---
+        function PublishingCalculator() {
+            // 1. 제작비용 State
+            const [printUnitCost, setPrintUnitCost] = useState(5000); 
+            const [internalDesignFee, setInternalDesignFee] = useState(500000); 
+            const [printCount, setPrintCount] = useState(200); 
+            
+            const [isBasicFeeIncluded, setIsBasicFeeIncluded] = useState(true);
+            const [isKeyVisualFeeIncluded, setIsKeyVisualFeeIncluded] = useState(true);
+            const [isReprintDesignFeeIncluded, setIsReprintDesignFeeIncluded] = useState(false);
+
+            // 2. 판매 단가 State
+            const [priceAdjustment, setPriceAdjustment] = useState(0); 
+
+            // 3. 투자 및 수익 비율 State
+            const [publisherInvestRatio, setPublisherInvestRatio] = useState(80);
+            const INVEST_RATIO_OPTIONS = [10, 20, 50, 80, 100];
+
+            // 수익 배분 보정 관련 State
+            const [isProfitAdjustmentEnabled, setIsProfitAdjustmentEnabled] = useState(false);
+            const [profitAdjustment, setProfitAdjustment] = useState(0); 
+            
+            // 4. 선수금 State
+            const [confirmedAdvance, setConfirmedAdvance] = useState(0); 
+
+            // 5. 정산 State
+            const [kyoboDiscount, setKyoboDiscount] = useState(0); 
+            const [naverDiscount, setNaverDiscount] = useState(10); 
+            
+            // 판매 비중 설정 (0~100 scale)
+            const [salesMixValue, setSalesMixValue] = useState(20); 
+
+            // 6. 기타 부수 관리 State (New)
+            const [authorCopies, setAuthorCopies] = useState(5); // 저자 제공 부수 (기본 5권)
+            const [authorPreOrder, setAuthorPreOrder] = useState(0); // 저자 선구매 부수
+            
+            // 7. 배송비 고객부담 여부 State (New)
+            const [isKyoboShippingCustomer, setIsKyoboShippingCustomer] = useState(false);
+            const [isNaverShippingCustomer, setIsNaverShippingCustomer] = useState(false);
+
+            // --- 계산 로직 ---
+
+            const BASIC_TASK_FEE_AMOUNT = 200000;
+            const KEY_VISUAL_DESIGN_AMOUNT = 300000;
+            const REPRINT_DESIGN_FEE_AMOUNT = 100000;
+
+            const appliedBasicFee = isBasicFeeIncluded ? BASIC_TASK_FEE_AMOUNT : 0;
+            const appliedKeyVisualFee = isKeyVisualFeeIncluded ? KEY_VISUAL_DESIGN_AMOUNT : 0;
+            const appliedReprintFee = isReprintDesignFeeIncluded ? REPRINT_DESIGN_FEE_AMOUNT : 0;
+
+            const safePrintUnitCost = Number(printUnitCost) || 0;
+            const safeInternalDesignFee = Number(internalDesignFee) || 0;
+            
+            // 1. 제작비 계산
+            const totalPrintCost = safePrintUnitCost * printCount;
+            const totalProductionCost = appliedBasicFee + appliedKeyVisualFee + appliedReprintFee + safeInternalDesignFee + totalPrintCost;
+
+            // 2. 단가 계산
+            const SHIPPING_CONST = 4000;
+            const fixedCostsForPrice = appliedBasicFee + appliedKeyVisualFee + appliedReprintFee;
+            
+            const targetSalesVolume = 9 * Math.sqrt(printCount);
+            const numerator = fixedCostsForPrice + safeInternalDesignFee + totalPrintCost + (targetSalesVolume * SHIPPING_CONST);
+            const denominator = targetSalesVolume * 0.69;
+            
+            const recommendedPriceRaw = denominator > 0 ? numerator / denominator : 0;
+            const recommendedPrice = Math.round(recommendedPriceRaw / 1000) * 1000;
+            const finalPrice = recommendedPrice + priceAdjustment;
+
+            const authorInvestRatio = 100 - publisherInvestRatio;
+            const publisherInvestAmount = totalProductionCost * (publisherInvestRatio / 100);
+            const authorInvestAmount = totalProductionCost * (authorInvestRatio / 100);
+
+            // 수익 배분 보정
+            const activeProfitAdjustment = isProfitAdjustmentEnabled ? profitAdjustment : 0;
+            const publisherProfitRatioRaw = publisherInvestRatio - activeProfitAdjustment;
+            const publisherProfitRatio = Math.max(0, Math.min(100, publisherProfitRatioRaw));
+            const authorProfitRatio = 100 - publisherProfitRatio;
+
+            const KYOBO_FEE_RATE = 0.35;
+            const NAVER_FEE_RATE = 0.05;
+            
+            // 배송비 반환 함수: 고객부담이면 1000, 아니면 기본 4000
+            const getShippingCost = (isCustomerPaid) => isCustomerPaid ? 1000 : SHIPPING_CONST;
+
+            const calcPlatformProfit = (discountRate, feeRate, isCustomerPaid) => {
+                const discountAmt = finalPrice * (discountRate / 100);
+                const feeAmt = finalPrice * feeRate;
+                const shippingCost = getShippingCost(isCustomerPaid);
+                // 운송비는 비용이므로 차감
+                const profit = finalPrice - discountAmt - feeAmt - shippingCost;
+                return Math.round(profit);
+            };
+
+            const kyoboProfit = calcPlatformProfit(kyoboDiscount, KYOBO_FEE_RATE, isKyoboShippingCustomer);
+            const naverProfit = calcPlatformProfit(naverDiscount, NAVER_FEE_RATE, isNaverShippingCustomer);
+
+            const salesMixNaverPercent = salesMixValue; 
+            const salesMixKyoboPercent = 100 - salesMixValue;
+            
+            const weightedAvgProfit = Math.round(
+                (kyoboProfit * (salesMixKyoboPercent / 100)) + 
+                (naverProfit * (salesMixNaverPercent / 100))
+            );
+
+            const publisherPerBookProfit = Math.round(weightedAvgProfit * (publisherProfitRatio / 100));
+            const authorPerBookProfit = Math.round(weightedAvgProfit * (authorProfitRatio / 100));
+
+            // --- 부수 및 선구매 계산 ---
+            const safeConfirmedAdvance = Number(confirmedAdvance) || 0;
+            const safeAuthorPreOrder = Number(authorPreOrder) || 0;
+
+            // 저자 선구매 (단가: 최종단가의 60%로 변경)
+            const authorPreOrderPrice = Math.round(finalPrice * 0.6);
+            const authorPreOrderTotal = safeAuthorPreOrder * authorPreOrderPrice;
+
+            // 최종 판매 가능 부수
+            const finalSalesCount = Math.max(0, printCount - authorCopies - safeAuthorPreOrder);
+
+            // 출판사 BEP (선수금 & 선구매 금액 반영)
+            // 실질 투자금 (회수 필요 금액) = 초기 투자금 - 결정 선수금 - 저자 선구매 매출
+            const realPublisherInvest = Math.max(0, publisherInvestAmount - safeConfirmedAdvance - authorPreOrderTotal);
+            
+            const publisherBEP = publisherPerBookProfit > 0 
+                ? Math.ceil(realPublisherInvest / publisherPerBookProfit) 
+                : Infinity;
+            
+            // 저자 BEP (선수금 포함 총 부담금, 하지만 손익 계산시는 선구매 비용은 제외하고 계산 요청 반영)
+            // 저자 최종 부담금(화면 표시용) = 초기투자 + 선수금 + 선구매 비용
+            const totalAuthorCost = authorInvestAmount + safeConfirmedAdvance + authorPreOrderTotal;
+            // 섹션 6 표시용 (선구매 미반영) & BEP 계산용 (순수 투자 회수 기준)
+            const totalAuthorCostWithoutPreOrder = authorInvestAmount + safeConfirmedAdvance;
+            
+            const authorBEP = authorPerBookProfit > 0 
+                ? Math.ceil(totalAuthorCostWithoutPreOrder / authorPerBookProfit) 
+                : Infinity;
+
+            // 저자 완판 시 적자 예상 (판매 가능 부수 기준)
+            const authorMaxRevenue = authorPerBookProfit * finalSalesCount;
+            const authorPotentialDeficit = authorMaxRevenue - totalAuthorCost;
+
+            // 권장 선수금 계산
+            const rawTargetBEP = Math.ceil(9 * Math.sqrt(printCount));
+            const maxTargetBEP = Math.ceil(printCount * 0.65);
+            const targetBEPCount = Math.min(rawTargetBEP, maxTargetBEP);
+
+            const targetInvestRecovery = targetBEPCount * publisherPerBookProfit;
+            // 권장 선수금 계산 시 저자 선구매 매출도 차감
+            const gap = publisherInvestAmount - targetInvestRecovery - authorPreOrderTotal;
+            const suggestedAdvance = Math.max(0, gap);
+
+            const fmt = (num) => num.toLocaleString() + '원';
+            
+            // BEP 렌더링 (비교 대상: finalSalesCount)
+            const renderBEP = (bepValue, limit) => {
+                if (bepValue === Infinity) return <span className="text-gray-400 text-lg">수익 불가</span>;
+                if (bepValue === 0) return <span className="text-blue-600 text-lg font-black">즉시 흑자</span>;
+                if (bepValue > limit) return <span className="text-gray-400 text-lg">해당 없음</span>;
+                return <span className="text-3xl font-black text-gray-900">{bepValue.toLocaleString()}권</span>;
+            };
+
+            // Custom change handler for sales mix to snap to specific values
+            const handleSalesMixChange = (val) => {
+                const options = [0, 20, 100];
+                const closest = options.reduce((prev, curr) => 
+                    Math.abs(curr - val) < Math.abs(prev - val) ? curr : prev
+                );
+                setSalesMixValue(closest);
+            };
+
+            // PDF 인쇄 핸들러
+            const handlePrint = () => {
+                window.print();
+            };
+
+            // 흐림 효과를 위한 클래스 결정 함수
+            const getSectionClass = (isActive) => {
+                return `transition-opacity duration-300 ${isActive ? 'opacity-100' : 'opacity-30 pointer-events-none'}`;
+            };
+
+            // salesMixValue: 0(교보100), 20(둘다), 100(네이버100)
+            const isKyoboActive = salesMixValue <= 20; // 0 or 20
+            const isNaverActive = salesMixValue >= 20; // 20 or 100
+
+            return (
+                <div className="min-h-screen p-4 md:p-8 bg-gray-50">
+                    <header className="w-full max-w-5xl mb-8 flex justify-between items-end relative">
+                        <div className="w-full text-center">
+                            <h1 className="text-3xl font-black mb-2" style={{ color: MAIN_DARK }}>
+                                출판 비용 & 수익 시뮬레이터
+                            </h1>
+                            <p className="text-gray-500 font-bold">아트플랫폼 유연 (박진형 010-2563-4237)</p>
+                        </div>
+                        
+                        <button 
+                            onClick={handlePrint}
+                            className="absolute right-0 top-0 no-print flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg shadow-sm hover:bg-gray-50 text-gray-700 font-bold transition-colors"
+                        >
+                            <Printer className="w-5 h-5" />
+                            <span className="text-sm">PDF 저장 / 인쇄</span>
+                        </button>
+                    </header>
+
+                    <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6">
+                        
+                        {/* 1. 제작비용 */}
+                        <Card title="1. 제작 비용 산출" icon={Calculator} className="md:col-span-2">
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                    <div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <NumberInput label="인쇄 단가" value={printUnitCost} onChange={setPrintUnitCost} />
+                                            <NumberInput label="내지 디자인비" value={internalDesignFee} onChange={setInternalDesignFee} />
+                                        </div>
+                                        
+                                        <div className="p-4 rounded-lg space-y-1" style={{ backgroundColor: SUB_COLOR }}>
+                                            <CheckboxItem label="기본 업무비" checked={isBasicFeeIncluded} onChange={setIsBasicFeeIncluded} amount={BASIC_TASK_FEE_AMOUNT} />
+                                            <CheckboxItem label="키비주얼 디자인" checked={isKeyVisualFeeIncluded} onChange={setIsKeyVisualFeeIncluded} amount={KEY_VISUAL_DESIGN_AMOUNT} />
+                                            <CheckboxItem label="재인쇄 디자인 수정" checked={isReprintDesignFeeIncluded} onChange={setIsReprintDesignFeeIncluded} amount={REPRINT_DESIGN_FEE_AMOUNT} />
+                                        </div>
+                                    </div>
+
+                                    <div className="flex flex-col justify-between">
+                                        <div className="pt-2">
+                                            <SliderWithButtons
+                                                label="인쇄 부수"
+                                                value={printCount}
+                                                onChange={setPrintCount}
+                                                min={100} max={500} step={50}
+                                                unitLabel="부"
+                                                valueSize="text-2xl"
+                                                marks={[
+                                                    { value: 100 }, { value: 200 }, { value: 300 }, { value: 400 }, { value: 500 }
+                                                ]}
+                                            />
+                                        </div>
+
+                                        <div className="p-4 rounded-lg border border-gray-200 bg-white">
+                                            <ResultRow label="총 인쇄비" value={fmt(totalPrintCost)} />
+                                            <ResultRow label="총 제작비 합계" value={fmt(totalProductionCost)} highlight />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </Card>
+
+                        {/* 2. 판매 단가 */}
+                        <Card title="2. 판매 단가 설정" icon={DollarSign}>
+                            <div className="space-y-6">
+                                <div className="p-4 rounded-lg text-center bg-gray-50 border border-gray-200">
+                                    <p className="text-sm font-bold text-gray-500 mb-1">계산된 권장 단가</p>
+                                    <p className="text-3xl font-black text-gray-800">{fmt(recommendedPrice)}</p>
+                                </div>
+
+                                <SliderWithButtons
+                                    label="비용 조정" 
+                                    value={priceAdjustment}
+                                    onChange={setPriceAdjustment}
+                                    min={-20000} max={20000} step={1000}
+                                    formatValue={(v) => (v > 0 ? '+' : '') + fmt(v)}
+                                    marks={[
+                                        { value: -20000 }, { value: -10000 }, { value: 0 }, { value: 10000 }, { value: 20000 }
+                                    ]}
+                                />
+
+                                <div className="p-4 rounded-lg flex justify-between items-center shadow-md text-white" style={{ backgroundColor: MAIN_COLOR }}>
+                                    <span className="font-bold text-white/90">최종 판매 단가</span>
+                                    <span className="text-2xl font-black">{fmt(finalPrice)}</span>
+                                </div>
+                            </div>
+                        </Card>
+
+                        {/* 3. 투자 및 수익 비율 */}
+                        <Card title="3. 투자 및 지분 설정" icon={PieChart}>
+                            <div className="space-y-6">
+                                <SliderWithButtons
+                                    label="투자 비율 (출판사 : 저자)"
+                                    value={INVEST_RATIO_OPTIONS.indexOf(publisherInvestRatio)}
+                                    onChange={(idx) => setPublisherInvestRatio(INVEST_RATIO_OPTIONS[idx])}
+                                    min={0} 
+                                    max={INVEST_RATIO_OPTIONS.length - 1} 
+                                    step={1}
+                                    formatValue={(idx) => {
+                                        const r = INVEST_RATIO_OPTIONS[idx];
+                                        return `${r}% : ${100-r}%`;
+                                    }}
+                                    valueSize="text-xl"
+                                    showButtons={false}
+                                    marks={INVEST_RATIO_OPTIONS.map((val, idx) => ({ value: idx, label: `${val}%` }))} 
+                                />
+
+                                <div className="grid grid-cols-2 gap-4 text-sm p-4 rounded border border-gray-200" style={{ backgroundColor: SUB_COLOR }}>
+                                    <div>
+                                        <span className="block text-gray-500 font-bold mb-1">출판사 투자금</span>
+                                        <span className="font-black text-lg" style={{ color: MAIN_DARK }}>{fmt(Math.round(publisherInvestAmount))}</span>
+                                    </div>
+                                    <div className="text-right">
+                                        <span className="block text-gray-500 font-bold mb-1">저자 투자금</span>
+                                        <span className="font-black text-lg" style={{ color: MAIN_DARK }}>{fmt(Math.round(authorInvestAmount))}</span>
+                                    </div>
+                                </div>
+
+                                <div className="border-t border-gray-100 my-4"></div>
+
+                                <div>
+                                    <div className="flex items-center justify-between mb-4">
+                                        <label className="text-sm font-bold text-gray-700 flex items-center gap-2">
+                                            수익 배분 보정
+                                            <div 
+                                                className={`w-10 h-5 rounded-full p-1 cursor-pointer transition-colors duration-300 ease-in-out ${isProfitAdjustmentEnabled ? 'bg-[#55798B]' : 'bg-gray-300'}`}
+                                                onClick={() => setIsProfitAdjustmentEnabled(!isProfitAdjustmentEnabled)}
+                                            >
+                                                <div className={`bg-white w-3 h-3 rounded-full shadow-md transform duration-300 ease-in-out ${isProfitAdjustmentEnabled ? 'translate-x-5' : ''}`}></div>
+                                            </div>
+                                        </label>
+                                        <span className="text-xs font-medium text-gray-500">{isProfitAdjustmentEnabled ? '적용 중' : '미적용'}</span>
+                                    </div>
+                                    
+                                    {isProfitAdjustmentEnabled && (
+                                        <div className="animate-fade-in">
+                                            <SliderWithButtons
+                                                label=""
+                                                value={profitAdjustment}
+                                                onChange={setProfitAdjustment}
+                                                min={-50} max={50} step={1}
+                                                formatValue={() => ""} 
+                                                leftLabel="출판사 우대"
+                                                rightLabel="저자 우대"
+                                            />
+                                            
+                                            <div className="text-center -mt-4 text-sm font-bold" style={{ color: MAIN_COLOR }}>
+                                                {profitAdjustment === 0 ? "보정 없음 (투자비율 따름)" : 
+                                                profitAdjustment < 0 ? `출판사 +${Math.abs(profitAdjustment)}% 추가 수익` : `저자 +${profitAdjustment}% 추가 수익`}
+                                            </div>
+                                        </div>
+                                    )}
+                                    {!isProfitAdjustmentEnabled && <div className="h-2"></div>}
+                                </div>
+
+                                <div className="p-3 rounded border flex justify-between items-center bg-white" 
+                                    style={{ borderColor: `${MAIN_COLOR}40` }}>
+                                    <span className="text-sm font-bold text-gray-600">최종 수익 배분율</span>
+                                    <span className="text-xl font-black" style={{ color: MAIN_DARK }}>
+                                        {publisherProfitRatio}% : {authorProfitRatio}%
+                                    </span>
+                                </div>
+                            </div>
+                        </Card>
+
+                        {/* 4. 판매 플랫폼 (좌: 교보, 우: 네이버) */}
+                        <Card title="4. 판매 플랫폼" icon={TrendingUp} className="md:col-span-2">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                
+                                <div className={`space-y-3 ${getSectionClass(isKyoboActive)}`}>
+                                    <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+                                        <h4 className="font-black text-lg" style={{ color: KYOBO_COLOR }}>A. 교보문고 (서점)</h4>
+                                        <div className="flex gap-2 text-xs font-bold">
+                                        <button 
+                                            onClick={() => setKyoboDiscount(0)}
+                                            className={`px-3 py-1 rounded transition-colors ${kyoboDiscount === 0 ? 'text-white' : 'bg-gray-100 text-gray-500'}`}
+                                            style={kyoboDiscount === 0 ? { backgroundColor: KYOBO_COLOR } : {}}
+                                        >정가</button>
+                                        <button 
+                                            onClick={() => setKyoboDiscount(10)}
+                                            className={`px-3 py-1 rounded transition-colors ${kyoboDiscount === 10 ? 'text-white' : 'bg-gray-100 text-gray-500'}`}
+                                            style={kyoboDiscount === 10 ? { backgroundColor: KYOBO_COLOR } : {}}
+                                        >10%할인</button>
+                                        </div>
+                                    </div>
+                                    <div className="flex justify-end mb-2">
+                                        <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+                                            <input 
+                                                type="checkbox" 
+                                                checked={isKyoboShippingCustomer} 
+                                                onChange={(e) => setIsKyoboShippingCustomer(e.target.checked)}
+                                                className="w-4 h-4 text-[#2A3855] rounded border-gray-300 focus:ring-[#2A3855]" 
+                                            />
+                                            배송비 고객부담
+                                        </label>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-x-8 gap-y-1">
+                                        <ResultRow label="판매가" value={fmt(finalPrice)} spacing="py-1" labelSize="text-xs" valueSize="text-sm" />
+                                        <ResultRow label={`할인(${kyoboDiscount}%)`} value={`-${fmt(Math.round(finalPrice * kyoboDiscount / 100))}`} spacing="py-1" labelSize="text-xs" valueSize="text-sm" />
+                                        <ResultRow label="수수료(35%)" value={`-${fmt(Math.round(finalPrice * 0.35))}`} spacing="py-1" labelSize="text-xs" valueSize="text-sm" />
+                                        <ResultRow label="운송비" value={`-${fmt(Math.abs(getShippingCost(isKyoboShippingCustomer)))}`} spacing="py-1" labelSize="text-xs" valueSize="text-sm" />
+                                    </div>
+                                    <div className="border-t border-dashed border-gray-300 pt-2">
+                                        <ResultRow label="권당 순수익" value={fmt(kyoboProfit)} highlight spacing="py-2" labelSize="text-xs" valueSize="text-base" />
+                                    </div>
+                                </div>
+
+                                <div className={`space-y-3 ${getSectionClass(isNaverActive)}`}>
+                                    <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+                                        <h4 className="font-black text-lg" style={{ color: NAVER_COLOR }}>B. 네이버 스마트스토어</h4>
+                                        <div className="flex gap-2 text-xs font-bold">
+                                        <button 
+                                            onClick={() => setNaverDiscount(0)}
+                                            className={`px-3 py-1 rounded transition-colors ${naverDiscount === 0 ? 'text-white' : 'bg-gray-100 text-gray-500'}`}
+                                            style={naverDiscount === 0 ? { backgroundColor: NAVER_COLOR } : {}}
+                                        >정가</button>
+                                        <button 
+                                            onClick={() => setNaverDiscount(10)}
+                                            className={`px-3 py-1 rounded transition-colors ${naverDiscount === 10 ? 'text-white' : 'bg-gray-100 text-gray-500'}`}
+                                            style={naverDiscount === 10 ? { backgroundColor: NAVER_COLOR } : {}}
+                                        >10%할인</button>
+                                        </div>
+                                    </div>
+                                    <div className="flex justify-end mb-2">
+                                        <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+                                            <input 
+                                                type="checkbox" 
+                                                checked={isNaverShippingCustomer} 
+                                                onChange={(e) => setIsNaverShippingCustomer(e.target.checked)}
+                                                className="w-4 h-4 text-[#03C75A] rounded border-gray-300 focus:ring-[#03C75A]" 
+                                            />
+                                            배송비 고객부담
+                                        </label>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-x-8 gap-y-1">
+                                        <ResultRow label="판매가" value={fmt(finalPrice)} spacing="py-1" labelSize="text-xs" valueSize="text-sm" />
+                                        <ResultRow label={`할인(${naverDiscount}%)`} value={`-${fmt(Math.round(finalPrice * naverDiscount / 100))}`} spacing="py-1" labelSize="text-xs" valueSize="text-sm" />
+                                        <ResultRow label="수수료(5%)" value={`-${fmt(Math.round(finalPrice * 0.05))}`} spacing="py-1" labelSize="text-xs" valueSize="text-sm" />
+                                        <ResultRow label="운송비" value={`-${fmt(Math.abs(getShippingCost(isNaverShippingCustomer)))}`} spacing="py-1" labelSize="text-xs" valueSize="text-sm" />
+                                    </div>
+                                    <div className="border-t border-dashed border-gray-300 pt-2">
+                                        <ResultRow label="권당 순수익" value={fmt(naverProfit)} highlight spacing="py-2" labelSize="text-xs" valueSize="text-base" />
+                                    </div>
+                                </div>
+
+                            </div>
+
+                            <div className="mt-8 pt-6 border-t border-gray-200">
+                                <h4 className="font-bold text-gray-800 mb-4 text-center">판매 비중 설정 (옵션 선택)</h4>
+                                <SliderWithButtons
+                                    label=""
+                                    value={salesMixValue} 
+                                    onChange={handleSalesMixChange}
+                                    min={0} max={100} step={1}
+                                    formatValue={() => ""} 
+                                    showButtons={false}
+                                    markLabels={true}
+                                    marks={[
+                                        { value: 0, label: "교보문고만" },
+                                        { value: 20, label: "교보문고와 네이버" },
+                                        { value: 100, label: "네이버만" }
+                                    ]}
+                                />
+                                
+                                {salesMixValue === 20 && (
+                                    <p className="mt-3 text-xs text-gray-500 text-center break-keep">
+                                        * 교보문고와 네이버를 병행 판매하는 경우 교보문고에서 80%, 네이버에서 20% 정도 판매되어 이를 반영하여 예상 평균 수익을 산출한다
+                                    </p>
+                                )}
+
+                                <div className="mt-6 text-white p-6 rounded-lg flex flex-col items-center justify-center shadow-lg" style={{ backgroundColor: MAIN_DARK }}>
+                                    <span className="text-gray-300 text-sm mb-1 font-medium">예상 평균 권당 수익 (Weighted Average)</span>
+                                    <span className="text-3xl font-black">{fmt(weightedAvgProfit)}</span>
+                                </div>
+                            </div>
+                        </Card>
+
+                        {/* 5. 부수 관리 및 선구매 (Reordered) */}
+                        <Card title="5. 부수 관리 및 선구매" icon={Package} className="md:col-span-2">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
+                                
+                                {/* 1. 저자 제공 부수 */}
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-bold text-gray-700">저자 제공 부수 (증정)</label>
+                                    <div className="flex items-center gap-3">
+                                        <button 
+                                            onClick={() => setAuthorCopies(Math.max(0, authorCopies - 1))}
+                                            className="w-10 h-10 flex items-center justify-center rounded-lg bg-gray-100 hover:bg-gray-200 border border-gray-300"
+                                        >
+                                            <Minus size={16} />
+                                        </button>
+                                        <span className="flex-1 text-center font-black text-xl text-gray-800">{authorCopies}권</span>
+                                        <button 
+                                            onClick={() => setAuthorCopies(authorCopies + 1)}
+                                            className="w-10 h-10 flex items-center justify-center rounded-lg bg-gray-100 hover:bg-gray-200 border border-gray-300"
+                                        >
+                                            <Plus size={16} />
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* 2. 저자 선구매 */}
+                                <div className="space-y-2">
+                                    <div className="flex justify-between items-end">
+                                        <label className="block text-sm font-bold text-gray-700">저자 선구매</label>
+                                        <span className="text-xs text-gray-500">단가: {fmt(authorPreOrderPrice)} (60%)</span>
+                                    </div>
+                                    <div className="relative">
+                                        <input 
+                                            type="number" 
+                                            value={authorPreOrder}
+                                            onChange={(e) => setAuthorPreOrder(Number(e.target.value))}
+                                            className="block w-full rounded-lg border-gray-300 pl-3 pr-10 py-2.5 focus:border-[#55798B] focus:ring-[#55798B] border font-bold text-gray-900"
+                                            placeholder="0"
+                                        />
+                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">권</span>
+                                    </div>
+                                    <div className="text-right">
+                                        <span className="text-xs text-gray-500 mr-1">총액:</span>
+                                        <span className="font-bold text-[#55798B]">{fmt(authorPreOrderTotal)}</span>
+                                    </div>
+                                </div>
+
+                                {/* 3. 최종 판매 가능 부수 */}
+                                <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 text-center flex flex-col justify-center h-full">
+                                    <span className="text-xs font-bold text-gray-500 uppercase mb-1">최종 시장 판매 부수</span>
+                                    <span className="text-3xl font-black text-gray-800">{finalSalesCount}권</span>
+                                    <span className="text-[10px] text-gray-400 mt-1">
+                                        (인쇄 {printCount} - 증정 {authorCopies} - 선구매 {safeAuthorPreOrder})
+                                    </span>
+                                </div>
+
+                            </div>
+                        </Card>
+
+                        {/* 6. 최종 수익 및 BEP 예측 (Reordered) */}
+                        <Card title="6. 최종 수익 및 BEP 예측" icon={BookOpen} className="md:col-span-2 border-t-4" style={{ borderTopColor: MAIN_COLOR }}>
+                            {/* Grid wrapper for Section 6 with no gap and border-r for divider */}
+                            <div className="grid grid-cols-2">
+                                {/* 출판사 결과 - 우측 border 추가, 패딩 적용 */}
+                                <div className="space-y-4 flex flex-col h-full justify-between px-6 border-r border-gray-200 text-center">
+                                    <h3 className="font-black text-xl" style={{ color: MAIN_DARK }}>출판사</h3>
+                                    
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-1">
+                                            <p className="text-xs text-gray-500 font-bold uppercase tracking-wide">최종 수익 비율</p>
+                                            <p className="text-xl font-black" style={{ color: MAIN_COLOR }}>{publisherProfitRatio}%</p>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <p className="text-xs text-gray-500 font-bold uppercase tracking-wide">실질 투자금</p>
+                                            <p className="text-xl font-bold text-gray-800">{fmt(Math.round(realPublisherInvest))}</p>
+                                            <p className="text-[10px] text-gray-400">(제작비+인쇄비)</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="py-2 rounded shadow-sm border border-gray-200 bg-gray-50">
+                                        <p className="text-xs text-gray-500 font-medium">권당 개별 수익</p>
+                                        <p className="text-xl font-black text-gray-800">{fmt(publisherPerBookProfit)}</p>
+                                    </div>
+
+                                    <div className="pt-2">
+                                        <p className="text-sm font-bold text-rose-600 mb-1">손익분기점 (BEP)</p>
+                                        {renderBEP(publisherBEP, finalSalesCount)}
+                                        <p className="text-xs text-gray-500 font-medium mt-1">판매 시 투자금 회수 완료</p>
+                                    </div>
+                                </div>
+
+                                {/* 저자 결과 - 패딩 적용 */}
+                                <div className="space-y-4 flex flex-col h-full justify-between px-6 text-center">
+                                    <h3 className="font-black text-xl" style={{ color: MAIN_DARK }}>저자</h3>
+                                    
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-1">
+                                            <p className="text-xs text-gray-500 font-bold uppercase tracking-wide">최종 수익 비율</p>
+                                            <p className="text-xl font-black" style={{ color: MAIN_COLOR }}>{authorProfitRatio}%</p>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <p className="text-xs text-gray-500 font-bold uppercase tracking-wide">최종 부담금</p>
+                                            <p className="text-xl font-bold text-gray-800">{fmt(Math.round(totalAuthorCostWithoutPreOrder))}</p>
+                                            <p className="text-[10px] text-gray-400">(초기투자+선수금, 저자 선구매 미반영)</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="py-2 rounded shadow-sm border border-gray-200 bg-gray-50">
+                                        <p className="text-xs text-gray-500 font-medium">권당 개별 수익</p>
+                                        <p className="text-xl font-black text-gray-800">{fmt(authorPerBookProfit)}</p>
+                                    </div>
+
+                                    <div className="pt-2">
+                                        <p className="text-sm font-bold text-rose-600 mb-1">손익분기점 (BEP)</p>
+                                        {renderBEP(authorBEP, finalSalesCount)}
+                                        <p className="text-xs text-gray-500 font-medium mt-1">판매 시 최종 부담금 회수 완료</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* 저자 선수금 섹션 */}
+                            <div className="mt-8 p-6 rounded-xl border shadow-inner" 
+                                style={{ backgroundColor: suggestedAdvance > 0 ? WARNING_BG : INFO_BG, borderColor: suggestedAdvance > 0 ? 'rgb(254 215 170)' : 'rgb(226 232 240)' }}>
+                                <div className="flex items-start gap-3 mb-4">
+                                    <Wallet className="w-6 h-6 mt-1" style={{ color: suggestedAdvance > 0 ? '#EA580C' : MAIN_COLOR }} />
+                                    <div className="flex-1">
+                                        <h4 className="font-black text-lg text-gray-900">저자 선수금 및 최종 부담금</h4>
+                                        <p className="text-sm text-gray-600 mt-1">
+                                            출판사의 손익분기점이 제작 부수를 초과할 경우, 리스크 관리를 위해 선수금을 협의할 수 있습니다.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="flex flex-col md:flex-row gap-6">
+                                    
+                                    <div className="flex-1 space-y-4">
+                                        <div className="flex justify-between items-center bg-white p-3 rounded border border-gray-200">
+                                            <div>
+                                                <span className="block text-xs font-bold text-gray-500">권장 선수금</span>
+                                                <span className="text-xs text-gray-400">목표: {targetBEPCount}권 판매 시 손익 달성</span>
+                                            </div>
+                                            <span className={`text-xl font-bold ${suggestedAdvance > 0 ? 'text-orange-600' : 'text-gray-400'}`}>
+                                                {fmt(Math.round(suggestedAdvance))}
+                                            </span>
+                                        </div>
+
+                                        <SliderWithButtons
+                                            label="결정 선수금" 
+                                            value={confirmedAdvance} 
+                                            onChange={setConfirmedAdvance}
+                                            min={0}
+                                            max={totalProductionCost} 
+                                            step={10000}
+                                            formatValue={(v) => fmt(v)}
+                                        />
+                                    </div>
+
+                                    <div className="flex-1 bg-white p-5 rounded-lg border border-gray-200 flex flex-col justify-center shadow-sm">
+                                        <div className="flex justify-between items-center mb-2 text-sm text-gray-500">
+                                            <span>저자 초기 투자금</span>
+                                            <span>{fmt(Math.round(authorInvestAmount))}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center mb-2 text-sm text-gray-500">
+                                            <span>(+) 결정 선수금</span>
+                                            <span>{fmt(safeConfirmedAdvance)}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center mb-3 text-sm text-gray-500">
+                                            <span>(+) 저자 선구매</span>
+                                            <span>{fmt(authorPreOrderTotal)}</span>
+                                        </div>
+                                        <div className="border-t border-gray-200 pt-3 flex flex-col gap-2">
+                                            <div className="flex justify-between items-center">
+                                                <span className="font-black text-gray-800">저자 최종 부담금</span>
+                                                <span className="font-black text-2xl" style={{ color: MAIN_COLOR }}>
+                                                    {fmt(Math.round(totalAuthorCost))}
+                                                </span>
+                                            </div>
+                                            <div className="text-right">
+                                                <span className={`text-[10px] font-bold ${authorPotentialDeficit >= 0 ? 'text-blue-500' : 'text-rose-500'}`}>
+                                                    (완판 시 정산금액: {fmt(authorPotentialDeficit)} / 증정 {authorCopies}권, 선구매 {safeAuthorPreOrder}권)
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </Card>
+
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<PublishingCalculator />);
+    </script>
+</body>
+</html>
